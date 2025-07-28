@@ -7,4 +7,3 @@ import '@/ai/flows/suggest-quiz-question.ts';
 import '@/ai/flows/cartoonify-image.ts';
 import '@/ai/flows/describe-image.ts';
 import '@/ai/flows/enhance-prompt.ts';
-
