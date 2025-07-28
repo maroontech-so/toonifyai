@@ -23,7 +23,6 @@ import {
   X,
 } from "lucide-react";
 import { cartoonifyImage, CartoonifyImageInput } from "@/ai/flows/cartoonify-image";
-import { editImage, EditImageInput } from "@/ai/flows/edit-image";
 import NextImage from "next/image";
 import { Textarea } from "@/components/ui/textarea";
 import { describeImage } from "@/ai/flows/describe-image";
@@ -51,8 +50,8 @@ type Message = {
     role: 'user' | 'assistant';
     text?: string;
     image?: string;
-    originalImage?: string; // For assistant messages, to know what it was based on
-    originalPrompt?: string; // For assistant messages, to know the prompt used
+    originalImage?: string | null | undefined;
+    originalPrompt?: string; 
     isLoading?: boolean;
 }
 
@@ -107,7 +106,6 @@ export default function ToonifyPage() {
   const activeConversation = getActiveConversation();
 
   useEffect(() => {
-    // Annoying but necessary: https://github.com/radix-ui/primitives/issues/1057
     const scrollViewport = scrollAreaRef.current?.children[0] as HTMLDivElement | undefined;
     if (scrollViewport) {
         scrollViewport.scrollTo({
@@ -140,7 +138,6 @@ export default function ToonifyPage() {
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     handleFileSelect(event.target.files?.[0] || null);
-    // Reset file input to allow selecting the same file again
     if(event.target) {
         event.target.value = "";
     }
@@ -195,12 +192,12 @@ export default function ToonifyPage() {
 
     setIsLoading(true);
 
-    if (!existingPrompt) { // Only add user message if it's a new generation
+    if (!existingPrompt) { 
         const userMessage: Message = {
             id: `msg-${Date.now()}`,
             role: 'user',
             text: currentPrompt,
-            image: currentUploadImage,
+            image: currentUploadImage === null ? undefined : currentUploadImage,
         };
         addMessageToConversation(activeConversationId, userMessage);
     }
@@ -213,52 +210,33 @@ export default function ToonifyPage() {
         originalImage: currentUploadImage
     });
 
-    // Reset UI state for new messages
     if (!existingPrompt) {
         setPrompt("");
         setUploadImage(null);
     }
     
     try {
-      let resultUri;
       let finalPrompt = currentPrompt;
-      let mode: 'cartoonify' | 'edit' = 'cartoonify';
-      
+
       if (currentUploadImage && !finalPrompt) {
           const { description } = await describeImage({photoDataUri: currentUploadImage});
           finalPrompt = `${description}, in the style of ${styleSuggestions[0]}`;
-          mode = 'cartoonify';
-      }
-      else if (currentUploadImage && finalPrompt) {
-          const editKeywords = ['edit', 'change', 'remove', 'add', 'make', 'turn'];
-          if (editKeywords.some(keyword => finalPrompt.toLowerCase().includes(keyword))) {
-              mode = 'edit';
-          } else {
-              const { description } = await describeImage({photoDataUri: currentUploadImage});
-              finalPrompt = `${description}, in the style of ${finalPrompt}`;
-              mode = 'cartoonify';
-          }
-      }
-      else {
-        mode = 'cartoonify';
+      } else if (currentUploadImage && finalPrompt) {
+          const { description } = await describeImage({photoDataUri: currentUploadImage});
+          finalPrompt = `${description}, in the style of ${finalPrompt}`;
       }
 
-
-      if (mode === 'cartoonify') {
-        const input: CartoonifyImageInput = { prompt: finalPrompt };
-        if (currentUploadImage) input.photoDataUri = currentUploadImage;
-        const result = await cartoonifyImage(input);
-        resultUri = result.cartoonifiedDataUri;
-      } else { // edit mode
-        const input: EditImageInput = { prompt: finalPrompt, photoDataUri: currentUploadImage! };
-        const result = await editImage(input);
-        resultUri = result.editedDataUri;
+      const input: CartoonifyImageInput = { prompt: finalPrompt };
+      if (currentUploadImage) {
+        input.photoDataUri = currentUploadImage;
       }
+      
+      const result = await cartoonifyImage(input);
       
       updateMessageInConversation(activeConversationId, assistantMessageId, {
         isLoading: false,
         text: currentPrompt,
-        image: resultUri,
+        image: result.cartoonifiedDataUri,
         originalImage: currentUploadImage,
         originalPrompt: finalPrompt,
       });
@@ -301,7 +279,7 @@ export default function ToonifyPage() {
     }
     toast({ title: "Enhancing and re-generating..." });
     const { enhancedPrompt } = await enhancePrompt({ prompt: message.originalPrompt });
-    await handleGenerate({ existingPrompt: enhancedPrompt, existingImage: message.originalImage });
+    await handleGenerate({ existingPrompt: enhancedPrompt, existingImage: message.originalImage ?? undefined });
   }
 
   const triggerFileSelect = () => fileInputRef.current?.click();
@@ -491,5 +469,3 @@ export default function ToonifyPage() {
     </SidebarProvider>
   );
 }
-
-    

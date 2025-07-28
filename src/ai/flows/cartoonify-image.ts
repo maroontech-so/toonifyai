@@ -1,4 +1,3 @@
-
 // src/ai/flows/cartoonify-image.ts
 'use server';
 
@@ -10,9 +9,8 @@
  * - CartoonifyImageOutput - The return type for the cartoonifyImage function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
-import { MediaPart } from 'genkit/cohere';
+import { ai } from '@/ai/genkit';
+import { z, MediaPart } from 'genkit';
 
 const CartoonifyImageInputSchema = z.object({
   photoDataUri: z
@@ -43,8 +41,9 @@ const cartoonifyImageFlow = ai.defineFlow(
     outputSchema: CartoonifyImageOutputSchema,
   },
   async input => {
-    
-    const promptParts: (string | MediaPart)[] = [];
+    const promptParts: (
+      { text: string } | MediaPart
+    )[] = [];
     let textPrompt = "";
 
     const masterPrompt = `You are a master digital artist specializing in creating exquisite, high-fidelity 3D character renders. Your task is to generate an image that exemplifies the pinnacle of digital art, characterized by its cinematic quality, impeccable detail, and sophisticated lighting.
@@ -67,23 +66,30 @@ const cartoonifyImageFlow = ai.defineFlow(
 5.  **Quality Benchmark:** The final output must be an ultra-high-resolution masterpiece, suitable for a professional art portfolio. Do not apply a simple filter; this is a from-scratch generation based on detailed instructions.`;
 
     if (input.photoDataUri) {
-        promptParts.push({media: {url: input.photoDataUri}});
-        textPrompt = `Analyze the provided image as the primary subject reference. Using that reference, execute the following master instructions:\n\n${masterPrompt}`;
+      promptParts.push({ media: { url: input.photoDataUri } });
+      textPrompt = `Analyze the provided image as the primary subject reference. Using that reference, execute the following master instructions:
+
+${masterPrompt}`;
     } else {
-        textPrompt = `Execute the following master instructions to generate an image from the user's prompt:\n\n${masterPrompt}`;
+      textPrompt = `Execute the following master instructions to generate an image from the user's prompt:
+
+${masterPrompt}`;
     }
 
-    promptParts.push({text: textPrompt});
+    promptParts.push({ text: textPrompt }); // Modified line to use { text: ... }
 
-    const {media} = await ai.generate({
-      // IMPORTANT: ONLY the googleai/gemini-2.0-flash-preview-image-generation model is able to generate images. You MUST use exactly this model to generate images.
+    const { media } = await ai.generate({
       model: 'googleai/gemini-2.0-flash-preview-image-generation',
       prompt: promptParts,
       config: {
-        responseModalities: ['TEXT', 'IMAGE'], // MUST provide both TEXT and IMAGE, IMAGE only won't work
+        responseModalities: ['TEXT', 'IMAGE'],
       },
     });
 
-    return {cartoonifiedDataUri: media.url!};
+    if (!media || !media.url) {
+      throw new Error("Image generation failed: No media URL returned.");
+    }
+
+    return { cartoonifiedDataUri: media.url! };
   }
 );
